@@ -5,6 +5,6 @@ from .models import CustomUser
 
 @admin.register(CustomUser)  # second option
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ['id', 'username', 'identifier']
+    list_display = ['id', 'email']
 
 # admin.site.register(CustomUser, UserAdmin)   # first option

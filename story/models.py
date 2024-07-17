@@ -1,119 +1,87 @@
-from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
+from core.models import BaseModel
 from core.settings import WORDS_PER_MINUTE
-
-User = get_user_model()
-"""
-class Story: 
-    - title: str (max_lenght: 255)
-    - content: str (max_length: 5000)
-    - status (draft, publish, archive, pending, reject, trash )
-    - created_at: datetime
-    - updated_at: datetime
-    - views_count: int (min: 0)
-    - read_time: int (property) 60 ta so'z 1 minut
-    - topics: Topic (ManyToManyField) +
-
-class ReadStory
-    - story_id: Story
-    - user_id: User
-    - created_at: datetime
-
-
-class Clap:
-    - story_id: Story
-    - user_id: User
-    - count: int (min: 0, max: 50)
-    
-class Comment:
-    - comment_id: Comment (blank=True, null=True)
-    - message: str
-    - user_id: User
-    - created_at: datetime
-    
-    
-class User(AbstractUser):
-    + username: str
-    + first_name: str
-    + last_name: str
-    - avatar: str (users/avatars/sirojiddinyakubov.jpg)
-    - headline: str (Masalan: Jonny)
-    - bio: str
-    - name: str (property: last_name + first_name)
-    - birth_date: date
-    - age (property: 2024 - birth_date)
-    + email: str
-    
-    
-class Topic:
-    - title: str
-    - created_at: datetime
-
-
-class FollowToTopic:
-    - user_id: User
-    - topic_id: Topic
-    - created_at: datetime
-    
-    
-class FollowToAuthor:
-    - author_id: User
-    - user_id: User
-    - created_at: datetime
-    
-    
-static vs media - done
-configure custom user - done
-AbstactUser vs AbstractBaseUser - done
-user_id or user in ForeignKey?
-user groups and permissions? - done
-"""
-
-from django.db import models
-
-
-class BaseModel(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateField(auto_now=True)
-
-    class Meta:
-        abstract = True
+from user.models import CustomUser
 
 
 class Topic(BaseModel):
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=100)
     is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
 
 
 class Story(BaseModel):
     DRAFT = 'draft'
-    PUBLISH = 'publish'
+    PUBLISHED = 'published'
     ARCHIVE = 'archive'
     PENDING = 'pending'
-    REJECT = 'reject'
+    REJECT = 'rejected'
     TRASH = 'trash'
-
-    STATUS_CHOICES = (
+    status_choices = [
         (DRAFT, 'Draft'),
-        (PUBLISH, 'Publish'),
+        (PUBLISHED, 'Published'),
         (ARCHIVE, 'Archive'),
         (PENDING, 'Pending'),
         (REJECT, 'Reject'),
         (TRASH, 'Trash'),
-    )
-
+    ]
     title = models.CharField(max_length=255)
     content = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=DRAFT)
+    status = models.CharField(max_length=10, choices=status_choices, default=DRAFT)
     views_count = models.PositiveBigIntegerField(default=0)
     topics = models.ManyToManyField(Topic, related_name="stories")
 
     @property
     def read_time(self):
-        return int(len(self.content.split()) / WORDS_PER_MINUTE)
+        word_count = len(self.content.split())
+        result = round(word_count / WORDS_PER_MINUTE)
+        return result
+
+    def __str__(self):
+        return self.title
 
 
 class FollowToTopic(BaseModel):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.user.email} follows {self.topic.title}"
+
+
+class ReadStory(BaseModel):
+    story = models.ForeignKey(Story, on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.user.email} read a {self.story.title}"
+
+
+class Clap(models.Model):
+    story = models.ForeignKey(Story, on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    count = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(50)])
+
+    def __str__(self):
+        return f"Clapped by {self.user.email} with {self.count} count"
+
+
+class Comment(BaseModel):
+    comment = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    message = models.TextField()
+
+    def __str__(self):
+        return f'Comment by {self.user.email} on {self.created_at}'
+
+
+class FollowAuthor(BaseModel):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='user_follows')
+    author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='authored_follows')
+
+    def __str__(self):
+        return f"{self.user.email} follows {self.author.email}"
